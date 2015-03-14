@@ -1,3 +1,90 @@
+" ========================
+" VAM Install and Setup
+" ========================
+
+" put this line first in ~/.vimrc
+set nocompatible | filetype indent plugin on | syn on
+
+fun! EnsureVamIsOnDisk(plugin_root_dir)
+  " windows users may want to use http://mawercer.de/~marc/vam/index.php
+  " to fetch VAM, VAM-known-repositories and the listed plugins
+  " without having to install curl, 7-zip and git tools first
+  " -> BUG [4] (git-less installation)
+  let vam_autoload_dir = a:plugin_root_dir.'/vim-addon-manager/autoload'
+  if isdirectory(vam_autoload_dir)
+    return 1
+  else
+    if 1 == confirm("Clone VAM into ".a:plugin_root_dir."?","&Y\n&N")
+      " I'm sorry having to add this reminder. Eventually it'll pay off.
+      call confirm("Remind yourself that most plugins ship with ".
+  \"documentation (README*, doc/*.txt). It is your ".
+  \"first source of knowledge. If you can't find ".
+  \"the info you're looking for in reasonable ".
+  \"time ask maintainers to improve documentation")
+      call mkdir(a:plugin_root_dir, 'p')
+      execute '!git clone --depth=1 git://github.com/MarcWeber/vim-addon-manager '.
+  \       shellescape(a:plugin_root_dir, 1).'/vim-addon-manager'
+      " VAM runs helptags automatically when you install or update 
+      " plugins
+      exec 'helptags '.fnameescape(a:plugin_root_dir.'/vim-addon-manager/doc')
+    endif
+    return isdirectory(vam_autoload_dir)
+  endif
+endfun
+
+fun! SetupVAM()
+  " Set advanced options like this:
+  " let g:vim_addon_manager = {}
+  " let g:vim_addon_manager.key = value
+  "     Pipe all output into a buffer which gets written to disk
+  " let g:vim_addon_manager.log_to_buf =1
+
+  " Example: drop git sources unless git is in PATH. Same plugins can
+  " be installed from www.vim.org. Lookup MergeSources to get more control
+  " let g:vim_addon_manager.drop_git_sources = !executable('git')
+  " let g:vim_addon_manager.debug_activation = 1
+
+  " VAM install location:
+  let c = get(g:, 'vim_addon_manager', {})
+  let g:vim_addon_manager = c
+  let c.plugin_root_dir = expand('$HOME/.vim/vim-addons', 1)
+  if !EnsureVamIsOnDisk(c.plugin_root_dir)
+    echohl ErrorMsg | echomsg "No VAM found!" | echohl NONE
+    return
+  endif
+  let &rtp.=(empty(&rtp)?'':',').c.plugin_root_dir.'/vim-addon-manager'
+
+  " Tell VAM which plugins to fetch & load:
+  call vam#ActivateAddons(['wombat256','Python-mode-klen'], {'auto_install' : 0})
+  " sample: call vam#ActivateAddons(['pluginA','pluginB', ...], {'auto_install' : 0})
+  " Also See "plugins-per-line" below
+
+  " Addons are put into plugin_root_dir/plugin-name directory
+  " unless those directories exist. Then they are activated.
+  " Activating means adding addon dirs to rtp and do some additional
+  " magic
+
+  " How to find addon names?
+  " - look up source from pool
+  " - (<c-x><c-p> complete plugin names):
+  " You can use name rewritings to point to sources:
+  "    ..ActivateAddons(["github:foo", .. => github://foo/vim-addon-foo
+  "    ..ActivateAddons(["github:user/repo", .. => github://user/repo
+  " Also see section "2.2. names of addons and addon sources" in VAM's documentation
+endfun
+call SetupVAM()
+" experimental [E1]: load plugins lazily depending on filetype, See
+" NOTES
+" experimental [E2]: run after gui has been started (gvim) [3]
+" option1:  au VimEnter * call SetupVAM()
+" option2:  au GUIEnter * call SetupVAM()
+" See BUGS sections below [*]
+" Vim 7.0 users see BUGS section [3]
+
+
+" =========================
+" General Settings
+" =========================
 
 " Automatic reloading of .vimrc
 autocmd! bufwritepost .vimrc source %
@@ -5,7 +92,6 @@ autocmd! bufwritepost .vimrc source %
 " Better copy and paste
 set pastetoggle=<F2>
 set clipboard=unnamed
-
 
 " Mouse and backspace
 set mouse=a
@@ -37,30 +123,25 @@ vnoremap < <gv "better dedent
 vnoremap > >gv "better indent (keeps indent)
 
 
-" Color scheme
+
+" Color Scheme
 set t_Co=256
 color wombat256mod
 
-"Enable syntax highlighting
+
+
+"Enable Syntax highlighting
 filetype off
 filetype plugin indent on
 syntax on
 
-" Show line numbers and length
+" Show Line Numbers and Length
 set number "show line numbers
 set tw=79
 set nowrap
 set fo-=t
 set colorcolumn=80
 highlight ColorColumn ctermbg=233
-
-" easier formatting of paragraphs
-vmap Q gq
-nmap Q gqap
-
-" history and undo
-set history=700
-set undolevels=700
 
 " Spaces instead of tabs
 set tabstop=4
@@ -75,30 +156,22 @@ set incsearch
 set ignorecase
 set smartcase
 
+" ============================
+" IDE Functionality
+" ============================
 
-" Disable stupid backup and swap files - they trigger too many events for file 
-" system watchers
-" set nobackup
-" set nowritebackup
-" set noswapfile
-
-" Pathogen setup
-call pathogen#infect()
-
-
-" =============================
-" Python IDE Functionality
-" =============================
-
-
-" Settings for vim-powerline
+" Powerline
 set laststatus=2
+set rtp+=/usr/local/lib/python3.4/dist-packages/powerline/bindings/vim
+python3 from powerline.vim import setup as powerline_setup
+python3 powerline_setup()
+python3 del powerline_setup
 
-" Settings for ctrlp
-let g:ctrlp_max_height = 30
-set wildignore+=*.pyc
-set wildignore+=*_build/*
-set wildignore+=*/coverage/*
+" CtrlP
+"let g:ctrlp_max_height = 30
+"set wildignore+=*.pyc
+"set wildignore+=*_build/*
+"set wildignore+=*/coverage/*
 
 " Settings for python-mode
 map <Leader>g :call RopeGotoDefinition()<CR>
@@ -110,25 +183,4 @@ let g:pymode_syntax = 1
 let g:pymode_syntax_builtin_objs = 0
 let g:pymode_syntax_builtin_funcs = 0
 map <Leader>b Oimport ipdb; ipdb.set_trace() # BREAKPOINT<C-c>
-
-" Better navigating through omnicomplete option list
-set completeopt=longest,menuone
-function! OmniPopup(action)
-    if pumvisible()
-        if a:action == 'j'
-            return "\<C-N>"
-        elseif a:action == "k"
-            return "\<C-P>"
-        endif
-    endif
-    return a:action
-endfunction
-
-inoremap <silent><C-j> <C-R>=OmniPopUp('j')<CR>
-inoremap <silent><C-k> <C-R>=OmniPopUp('k')<CR>
-
-
-" Python folding
-set nofoldenable
-
 
